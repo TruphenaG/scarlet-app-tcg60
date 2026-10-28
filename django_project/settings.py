@@ -1,20 +1,21 @@
 """
 Django settings for the Scarlet Roasters case-company app — 33:136:440.
 
-Week 5 starter. Three things here are different from what `startproject` gives you,
-and each one is marked with  # WEEK 5  so you can find it:
-
-  1. SECRET_KEY and DEBUG come from the environment, not from this file.
-  2. ALLOWED_HOSTS / CSRF_TRUSTED_ORIGINS include *.vercel.app.
-  3. STATIC_ROOT is set, so Vercel runs collectstatic for you.
-
-Everything else is Django's default. Read it once; you will edit it in Week 6.
+The public pages keep the Week 5 setup. The operations app maps the existing
+class PostgreSQL database for the Week 7 Admin and Status pages.
 """
 
 import os
 from pathlib import Path
 
+import dj_database_url
+from dotenv import load_dotenv
+
 BASE_DIR = Path(__file__).resolve().parent.parent
+
+# Vercel's environment wins; local settings can come from either lab file name.
+load_dotenv(BASE_DIR / ".env.local", override=False)
+load_dotenv(BASE_DIR / ".env", override=False)
 
 # WEEK 5 — secrets stay out of the repository.
 # Locally the fallback is used. On Vercel, set SECRET_KEY in Project → Settings → Environment Variables.
@@ -38,6 +39,7 @@ INSTALLED_APPS = [
     "django.contrib.messages",
     "django.contrib.staticfiles",
     "pages",  # WEEK 5 — our app
+    "operations.apps.OperationsConfig",
 ]
 
 MIDDLEWARE = [
@@ -69,13 +71,24 @@ TEMPLATES = [
 
 WSGI_APPLICATION = "django_project.wsgi.application"  # Vercel reads this line to find the app
 
-# Database — untouched this week. Week 6 replaces this block with PostgreSQL (local + Neon).
-DATABASES = {
-    "default": {
+# DATABASE_URL must point to the existing, seeded class database on Neon.
+# Without it, /status/ reports the missing PostgreSQL setup and 0 of 11 tables.
+database_url = os.environ.get("DATABASE_URL", "").strip()
+if database_url:
+    database = dj_database_url.parse(
+        database_url,
+        conn_max_age=0,
+        ssl_require="VERCEL" in os.environ,
+    )
+    if database["ENGINE"] == "django.db.backends.postgresql":
+        database.setdefault("OPTIONS", {})["connect_timeout"] = 10
+        database["DISABLE_SERVER_SIDE_CURSORS"] = True
+else:
+    database = {
         "ENGINE": "django.db.backends.sqlite3",
-        "NAME": BASE_DIR / "db.sqlite3",
+        "NAME": ":memory:" if "VERCEL" in os.environ else BASE_DIR / "db.sqlite3",
     }
-}
+DATABASES = {"default": database}
 
 AUTH_PASSWORD_VALIDATORS = [
     {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},
